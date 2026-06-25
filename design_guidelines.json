@@ -1,0 +1,156 @@
+{
+  "app_name": "DealHawk AI",
+  "personality": "7 Dark-First Utility",
+  "personality_one_liner": "A fast, predatory, command-center interface built for deal-flippers to instantly spot and strike on high-margin opportunities.",
+  "color": {
+    "surface": "#0F0F13",
+    "onSurface": "#F3F4F6",
+    "surfaceSecondary": "#1C1C22",
+    "onSurfaceSecondary": "#D1D5DB",
+    "surfaceTertiary": "#272730",
+    "onSurfaceTertiary": "#9CA3AF",
+    "surfaceInverse": "#FFFFFF",
+    "onSurfaceInverse": "#0F0F13",
+    "brand": "#EA580C",
+    "brandPrimary": "#EA580C",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#C2410C",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "rgba(234, 88, 12, 0.15)",
+    "onBrandTertiary": "#F97316",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#0F0F13",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#272730",
+    "borderStrong": "#3F3F46",
+    "divider": "#1F2937"
+  },
+  "typography": {
+    "displayFontFamily": "Barlow Condensed",
+    "textFontFamily": "DM Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use stacked modules, segmented controls, sticky filters, and exposed system states. Avoid soft spacing; layout must feel athletic, durable, and structurally clear.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": false,
+    "do's": [
+      "Use tonal separation (surfaceSecondary) instead of glass on dense data screens."
+    ],
+    "dont's": [
+      "Do not use blur or glassmorphism. This personality requires sharp, responsive, tactical interfaces over visual softness."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Dashboard",
+      "purpose": "Command center displaying top-ranked deals, recent AI scans, and category filters.",
+      "states": {
+        "loading": "Centered loader with 'Scanning market...' text.",
+        "empty": "Hawk illustration. 'No deals monitored yet. Start scanning.' with a primary CTA to Analyze.",
+        "error": "Error icon + 'Failed to load feed. Check connection.' + Retry button."
+      },
+      "layout": "Sticky category filter chips at the top. Grid of deal cards below. Cards feature a large Barlow Condensed score, image thumbnail, and expected profit metric."
+    },
+    {
+      "name": "AnalyzeForm",
+      "purpose": "Fast data-entry view to paste marketplace listing details and upload screenshots.",
+      "states": {
+        "loading": "Standard spinner.",
+        "empty": "N/A - Form is the default state.",
+        "error": "Standard form validation errors (red borders)."
+      },
+      "layout": "Single column form. Floating labels or top-aligned labels. Sticky 'Analyze Deal' CTA pinned above the keyboard. Image upload uses a dashed border box."
+    },
+    {
+      "name": "AnalysisResult",
+      "purpose": "The hero view displaying the AI deal score, risk evaluation, and suggested actions.",
+      "states": {
+        "loading": "Skeleton UI replicating the card shape, with pulse animation to simulate AI scanning the details.",
+        "empty": "N/A",
+        "error": "'Analysis failed. Try again.' with Retry button."
+      },
+      "layout": "Full-screen modal or detailed view. Top hero section features a glowing score ring with large display font over the dark abstract background. Below: progressive reveal list of profit breakdown, red flags, and a copyable suggested negotiation message."
+    },
+    {
+      "name": "DealBoard",
+      "purpose": "Kanban-style or grouped list tracking the status of saved deals.",
+      "states": {
+        "loading": "Skeleton list items.",
+        "empty": "'Board is empty. Find a deal to track.' + Add Deal CTA.",
+        "error": "'Failed to load board.' + Retry button."
+      },
+      "layout": "Segmented control at the top to filter by status (New, Watching, Messaged, Purchased, Sold, Skipped). Vertical list of compact deal cards displaying current status, image thumbnail, and profit margin."
+    }
+  ],
+  "images": {
+    "hero_abstract_bg": {
+      "url": "https://images.unsplash.com/photo-1688494930045-328d0f95efe9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBzbGVlayUyMGRhc2hib2FyZCUyMGRhcmslMjBtb2RlJTIwYmFja2dyb3VuZHN8ZW58MHx8fHwxNzgyMzc4ODQyfDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1688494930045-328d0f95efe9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBzbGVlayUyMGRhc2hib2FyZCUyMGRhcmslMjBtb2RlJTIwYmFja2dyb3VuZHN8ZW58MHx8fHwxNzgyMzc4ODQyfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Black and orange abstract modern curves for hero score background"
+    },
+    "empty_hawk_mascot": {
+      "url": "https://images.pexels.com/photos/31715589/pexels-photo-31715589.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "dark": "https://images.pexels.com/photos/31715589/pexels-photo-31715589.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Close-up of a predatory hawk against a dark background"
+    }
+  },
+  "haptics": {
+    "events": {
+      "analyze_submit": "impactHeavy",
+      "score_reveal": "notificationSuccess",
+      "tab_change": "selection",
+      "status_change": "impactMedium",
+      "copy_message": "impactLight"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Dark-First Utility (Personality 7) guidelines. Use deep obsidian (#0F0F13) for the primary surface and Ember/Orange (#EA580C) exclusively for the primary CTA, active tabs, and high-value accents. Do not introduce blue or purple.",
+    "Text contrast is critical. Use layered dark grays (surfaceSecondary #1C1C22 and surfaceTertiary #272730) to create depth instead of heavy shadows or glassmorphism.",
+    "Typography must drive the layout: use 'Barlow Condensed' for deal scores, metrics, prices, and timers to create a tactical, command-center feel. Use 'DM Sans' for body text and form labels to guarantee readability.",
+    "For the Analysis Result Card, use the 'hero_abstract_bg' image with a top-down gradient scrim (transparent to #0F0F13) so text remains readable. Incorporate an ambient glow for the AI score indicator.",
+    "The DealBoard must use segmented controls for statuses (New, Watching, Messaged, etc.) with a compact, vertically scrolling list of cards to ensure fast scanning.",
+    "Ensure 'Analyze Deal' and 'Save Deal' primary CTAs are sticky at the bottom of the screen (above the home indicator) on scrolling views.",
+    "Wire haptic feedback mapping to the defined events in the JSON. Specifically trigger heavy impacts when submitting a deal for analysis and a success notification when the score is revealed."
+  ]
+}
