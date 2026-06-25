@@ -87,6 +87,10 @@ class MarketData(BaseModel):
 class DealAnalysisResult(BaseModel):
     deal_score: int
     inferred_title: Optional[str] = None
+    inferred_category: Optional[str] = None
+    inferred_location: Optional[str] = None
+    inferred_seller_description: Optional[str] = None
+    inferred_price: Optional[float] = None
     estimated_resale_value: float
     max_price_to_pay: float
     expected_profit: float
@@ -99,14 +103,18 @@ class DealAnalysisResult(BaseModel):
 
 class AnalyzeBody(BaseModel):
     title: Optional[str] = ""
-    price: float
+    price: Optional[float] = None
     location: Optional[str] = ""
-    category: str = "other"
+    category: Optional[str] = ""
     condition: Optional[str] = ""
     seller_description: Optional[str] = ""
     notes: Optional[str] = ""
     # list of base64 images (data URL or raw base64 without prefix); mime jpeg/png
     images: List[str] = Field(default_factory=list)
+
+class PricePoint(BaseModel):
+    price: float
+    at: datetime
 
 class Deal(BaseModel):
     deal_id: str
@@ -123,6 +131,7 @@ class Deal(BaseModel):
     status: Literal["new", "watching", "messaged", "purchased", "sold", "skipped"] = "new"
     analysis: Optional[DealAnalysisResult] = None
     last_checked_at: Optional[datetime] = None
+    price_history: List[PricePoint] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -345,11 +354,15 @@ async def register_push(body: RegisterPushBody, user: dict = Depends(get_current
 # ---------- AI Analysis ----------
 ANALYSIS_SYSTEM_PROMPT = """You are DealHawk AI, an expert second-hand market analyst for Facebook Marketplace deals.
 
-Given a listing's title (optional), price, location, category, condition, seller's description, user notes, and optionally photos, you produce a structured assessment.
+Given a listing's title (optional), price (optional), location (optional), category (optional), condition (optional), seller's description (optional), user notes, and optionally photos, you produce a structured assessment.
 
 Output STRICT JSON with EXACTLY these keys:
 {
-  "inferred_title": "<short item description you determined; copy the user's title if it was given, otherwise infer from photos>",
+  "inferred_title": "<short item description; copy the user's title if it was given, otherwise infer from photos>",
+  "inferred_category": "<one of: electronics, furniture, vehicles, tools, collectibles, appliances, free, other — copy user's if given, otherwise pick based on photos/description>",
+  "inferred_location": "<copy user's location if given; otherwise infer from any visible address/neighborhood/license-plate/street signs in photos, OR leave empty string if truly unknown>",
+  "inferred_seller_description": "<copy user's seller_description if given; otherwise produce a 1-2 sentence description that a seller would write based on what you see in the photos>",
+  "inferred_price": <copy user's price as a number if given (>0); otherwise infer a likely asking price from photos (e.g. a visible price tag or sticker) — if completely unknown, use the resale value as a placeholder>,
   "deal_score": <integer 1-10, where 10 = exceptional deal>,
   "estimated_resale_value": <number, realistic resale price in USD>,
   "max_price_to_pay": <number, the max someone should pay to still profit>,
@@ -360,22 +373,23 @@ Output STRICT JSON with EXACTLY these keys:
   "recommendation": "<one of: buy, negotiate, watch, skip>",
   "reasoning": "<2-3 sentences explaining the score>",
   "market_data": {
-    "buyer_demand": "<1-2 sentences on buyer demand for this item in the buyer's location (cite city/region heuristics; mention if demand is high/medium/low and why)>",
-    "seller_competition": "<1-2 sentences estimating how many similar listings a buyer would find locally and what typical asking prices look like>",
+    "buyer_demand": "<1-2 sentences on buyer demand for this item in the buyer's location>",
+    "seller_competition": "<1-2 sentences estimating how many similar listings exist locally>",
     "local_price_range": "<typical local resale price range, e.g. '$420-$520 in major US metros'>",
-    "notes": "<any regional caveat, e.g. lower demand in rural areas, seasonality, transport costs>"
+    "notes": "<any regional caveat>"
   }
 }
 
 Rules:
-- If no title is provided, you MUST determine the item from the photos and put that in inferred_title (be specific: brand, model, capacity, color if visible).
+- If no title is provided, you MUST identify the item from the photos and put that in inferred_title (be specific: brand, model, capacity/size, color).
+- If no category is provided, pick one from the allowed list based on the item.
+- If no location is provided, attempt to infer from photo cues (street signs, plates) — otherwise empty string.
+- If no seller_description is provided, write a plausible 1-2 sentence description of what you observe in the photos.
+- If no price (or price <= 0) is provided, look for a price tag/sticker in the photos; if none, use estimated_resale_value as a fallback inferred_price.
 - If neither title NOR readable photos are provided, return inferred_title="Unknown item" and a low deal_score with risk_warning explaining that the item can't be identified.
 - Be realistic about resale value (US market). If unsure, lean conservative.
-- If the price already matches resale, score around 5-6 and recommend 'watch' or 'negotiate'.
-- If the deal is great, recommend 'buy' or 'negotiate'.
-- If suspicious (stock photo signs, vague desc, too good to be true, payment off-platform, asks to ship), recommend 'skip' and add red flags.
-- For 'free items', resale value can be positive; recommendation should usually be 'buy' if low risk.
-- market_data: always populate when a non-empty location is given. If no location, return market_data with empty strings.
+- If suspicious (stock photo signs, vague desc, too good to be true), recommend 'skip' and add red flags.
+- market_data: always populate when a non-empty location (provided or inferred) is given.
 - Return ONLY the JSON object, no markdown fences, no commentary.
 """
 
@@ -406,6 +420,7 @@ async def analyze_deal(body: AnalyzeBody, user: dict = Depends(get_current_user)
 
     n_imgs = len([1 for img in body.images[:4] if _parse_image_b64(img)])
     has_title = bool((body.title or "").strip())
+    has_price = body.price is not None and float(body.price) > 0
     if not has_title and n_imgs == 0:
         raise HTTPException(
             status_code=400,
@@ -420,16 +435,28 @@ async def analyze_deal(body: AnalyzeBody, user: dict = Depends(get_current_user)
             "- Judge actual condition (scratches, wear, damage, missing accessories) and reconcile vs the seller's stated condition.\n"
             "- Spot scam indicators (obvious stock photos, watermarked images, screenshots of other listings, blurry/low-effort photos, mismatched backgrounds).\n"
             "- Identify model/specs (e.g. iPhone storage badge, brand stickers, serial labels) that affect resale value.\n"
-            "Reflect what you SAW in the photos inside the red_flags array and reasoning. "
-            "If photos contradict the seller's description, call it out explicitly."
+            "- Look for price tags/stickers if no price was provided, and any location cues (street signs, license plates) if no location was provided.\n"
+            "Reflect what you SAW in the photos inside the red_flags array and reasoning."
         )
     else:
         photo_instr = "\n\nNo photos were attached. Note this in your reasoning since it materially limits confidence."
 
+    missing_fields = []
     if not has_title:
+        missing_fields.append("title")
+    if not has_price:
+        missing_fields.append("price")
+    if not (body.location or "").strip():
+        missing_fields.append("location")
+    if not (body.category or "").strip():
+        missing_fields.append("category")
+    if not (body.seller_description or "").strip():
+        missing_fields.append("seller_description")
+    if missing_fields and n_imgs > 0:
         photo_instr += (
-            "\n\nThe user DID NOT provide a title. You MUST identify the item solely from the photos "
-            "and populate `inferred_title` with a specific description (brand, model, capacity/size, color)."
+            "\n\nThe user did not provide: "
+            + ", ".join(missing_fields)
+            + ". You MUST infer each missing field from the photos and populate the corresponding `inferred_*` JSON key with a confident value."
         )
 
     location_clean = (body.location or "").strip()
@@ -439,16 +466,16 @@ async def analyze_deal(body: AnalyzeBody, user: dict = Depends(get_current_user)
             "seller competition, local price range, and any regional notes specific to that area."
         )
     else:
-        market_instr = "\n\nNo location given. Return market_data with empty strings."
+        market_instr = "\n\nNo location given. If you infer a location from photos, use it for market_data. Otherwise return market_data with empty strings."
 
     user_prompt = f"""Evaluate this Facebook Marketplace listing.
 
 Title: {body.title.strip() if has_title else '(not provided — identify from photos)'}
-Asking price: ${body.price}
-Location: {location_clean or 'not provided'}
-Category: {body.category}
+Asking price: {f'${body.price}' if has_price else '(not provided — infer from photos)'}
+Location: {location_clean or '(not provided — infer from photos)'}
+Category: {(body.category or '').strip() or '(not provided — infer from photos)'}
 Condition: {body.condition or 'not provided'}
-Seller description: {body.seller_description or 'not provided'}
+Seller description: {body.seller_description or '(not provided — write one from photos)'}
 Buyer notes: {body.notes or 'none'}
 {photo_instr}
 {market_instr}
@@ -495,9 +522,18 @@ Return only the JSON object as instructed."""
     )
 
     try:
+        inferred_price_raw = data.get("inferred_price")
+        try:
+            inferred_price_val = float(inferred_price_raw) if inferred_price_raw is not None else None
+        except (TypeError, ValueError):
+            inferred_price_val = None
         result = DealAnalysisResult(
             deal_score=int(round(float(data.get("deal_score", 5)))),
             inferred_title=(str(data.get("inferred_title", "")).strip() or (body.title.strip() if has_title else None)),
+            inferred_category=(str(data.get("inferred_category", "")).strip().lower() or None),
+            inferred_location=(str(data.get("inferred_location", "")).strip() or None),
+            inferred_seller_description=(str(data.get("inferred_seller_description", "")).strip() or None),
+            inferred_price=inferred_price_val,
             estimated_resale_value=float(data.get("estimated_resale_value", 0) or 0),
             max_price_to_pay=float(data.get("max_price_to_pay", 0) or 0),
             expected_profit=float(data.get("expected_profit", 0) or 0),
@@ -524,26 +560,48 @@ Return only the JSON object as instructed."""
 async def save_deal(body: SaveDealBody, user: dict = Depends(get_current_user)):
     deal_id = f"deal_{uuid.uuid4().hex[:12]}"
     now = now_utc()
+    a = body.analysis
+
     title = (body.title or "").strip()
-    if not title and body.analysis and body.analysis.inferred_title:
-        title = body.analysis.inferred_title
+    if not title and a and a.inferred_title:
+        title = a.inferred_title
     if not title:
         title = "Untitled listing"
+
+    price = float(body.price) if body.price and float(body.price) > 0 else 0.0
+    if price <= 0 and a and a.inferred_price and a.inferred_price > 0:
+        price = float(a.inferred_price)
+
+    category = (body.category or "").strip().lower()
+    if not category and a and a.inferred_category:
+        category = a.inferred_category
+    if not category:
+        category = "other"
+
+    location = (body.location or "").strip()
+    if not location and a and a.inferred_location:
+        location = a.inferred_location
+
+    seller_description = (body.seller_description or "").strip()
+    if not seller_description and a and a.inferred_seller_description:
+        seller_description = a.inferred_seller_description
+
     deal = {
         "deal_id": deal_id,
         "user_id": user["user_id"],
         "title": title,
-        "price": body.price,
-        "location": body.location or "",
-        "category": body.category,
+        "price": price,
+        "location": location,
+        "category": category,
         "condition": body.condition or "",
-        "seller_description": body.seller_description or "",
+        "seller_description": seller_description,
         "notes": body.notes or "",
         "listing_url": (body.listing_url or "").strip(),
         "images": body.images,
         "status": body.status or "new",
-        "analysis": body.analysis.model_dump() if body.analysis else None,
+        "analysis": a.model_dump() if a else None,
         "last_checked_at": None,
+        "price_history": [{"price": price, "at": now}] if price > 0 else [],
         "created_at": now,
         "updated_at": now,
     }
@@ -581,20 +639,33 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
 
 @api.patch("/deals/{deal_id}", response_model=Deal)
 async def update_deal(deal_id: str, body: UpdateDealBody, user: dict = Depends(get_current_user)):
+    existing = await db.deals.find_one({"deal_id": deal_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Deal not found")
+
     updates: dict = {"updated_at": now_utc()}
+    push_ops: dict = {}
     if body.status is not None:
         updates["status"] = body.status
     if body.notes is not None:
         updates["notes"] = body.notes
-    if body.price is not None:
-        updates["price"] = float(body.price)
     if body.listing_url is not None:
         updates["listing_url"] = body.listing_url.strip()
     if body.mark_checked:
         updates["last_checked_at"] = now_utc()
+    if body.price is not None:
+        new_price = float(body.price)
+        updates["price"] = new_price
+        if abs(new_price - float(existing.get("price", 0) or 0)) > 1e-6:
+            push_ops["price_history"] = {"price": new_price, "at": now_utc()}
+
+    mongo_update: dict = {"$set": updates}
+    if push_ops:
+        mongo_update["$push"] = push_ops
+
     res = await db.deals.find_one_and_update(
         {"deal_id": deal_id, "user_id": user["user_id"]},
-        {"$set": updates},
+        mongo_update,
         return_document=True,
         projection={"_id": 0},
     )

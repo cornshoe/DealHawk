@@ -72,36 +72,40 @@ export default function Analyze() {
       setErr("Add a title or at least one photo");
       return;
     }
-    if (!price.trim()) {
-      setErr("Price is required");
-      return;
-    }
-    const num = parseFloat(price);
-    if (isNaN(num)) {
-      setErr("Price must be a number");
+    let num: number | null = null;
+    if (price.trim()) {
+      const parsed = parseFloat(price);
+      if (isNaN(parsed)) {
+        setErr("Price must be a number");
+        return;
+      }
+      num = parsed;
+    } else if (images.length === 0) {
+      setErr("Add a price or at least one photo (AI can read price tags)");
       return;
     }
     setBusy(true);
     try {
       if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      const payload = {
+        title: title.trim(),
+        price: num,
+        location: location.trim(),
+        category,
+        condition: condition.trim(),
+        seller_description: sellerDesc.trim(),
+        notes: notes.trim(),
+        images,
+      };
       const analysis = await apiFetch<any>("/analyze", {
         method: "POST",
-        body: JSON.stringify({
-          title: title.trim(),
-          price: num,
-          location: location.trim(),
-          category,
-          condition: condition.trim(),
-          seller_description: sellerDesc.trim(),
-          notes: notes.trim(),
-          images,
-        }),
+        body: JSON.stringify(payload),
       });
       const deal = await apiFetch<any>("/deals", {
         method: "POST",
         body: JSON.stringify({
           title: title.trim(),
-          price: num,
+          price: num ?? 0,
           location: location.trim(),
           category,
           condition: condition.trim(),
@@ -193,13 +197,13 @@ export default function Analyze() {
 
         <View style={{ flexDirection: "row", gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>PRICE (USD) *</Text>
+            <Text style={styles.label}>PRICE (USD){images.length > 0 ? "" : " *"}</Text>
             <TextInput
               testID="analyze-price"
               value={price}
               onChangeText={setPrice}
               keyboardType="decimal-pad"
-              placeholder="500"
+              placeholder={images.length > 0 ? "Optional" : "500"}
               placeholderTextColor={colors.onSurfaceTertiary}
               style={styles.input}
             />

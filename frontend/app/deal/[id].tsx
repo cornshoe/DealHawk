@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Polyline, Circle, Line as SvgLine } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -41,6 +42,7 @@ type Deal = {
   created_at: string;
   updated_at: string;
   last_checked_at?: string | null;
+  price_history?: Array<{ price: number; at: string }>;
   analysis?: {
     deal_score: number;
     inferred_title?: string | null;
@@ -438,6 +440,13 @@ export default function DealDetail() {
             </>
           )}
 
+          {deal.price_history && deal.price_history.length >= 1 ? (
+            <>
+              <Text style={styles.sectionTitle}>PRICE HISTORY</Text>
+              <PriceHistoryChart history={deal.price_history} />
+            </>
+          ) : null}
+
           {deal.images.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>PHOTOS</Text>
@@ -614,6 +623,106 @@ function PriceHoldButton({
     >
       <Ionicons name={icon} size={28} color={colors.brand} />
     </Pressable>
+  );
+}
+
+function PriceHistoryChart({ history }: { history: Array<{ price: number; at: string }> }) {
+  const W = 320;
+  const H = 140;
+  const padX = 28;
+  const padY = 18;
+  const pts = history
+    .map((p) => ({ price: Number(p.price) || 0, t: new Date(p.at).getTime() }))
+    .filter((p) => !isNaN(p.t))
+    .sort((a, b) => a.t - b.t);
+
+  if (pts.length === 0) {
+    return (
+      <View style={styles.chartEmpty}>
+        <Text style={styles.muted}>No price data yet.</Text>
+      </View>
+    );
+  }
+
+  const minPrice = Math.min(...pts.map((p) => p.price));
+  const maxPrice = Math.max(...pts.map((p) => p.price));
+  const minT = pts[0].t;
+  const maxT = pts[pts.length - 1].t;
+  const xRange = Math.max(1, maxT - minT);
+  const yRange = Math.max(1, maxPrice - minPrice);
+
+  const mapX = (t: number) =>
+    pts.length === 1 ? W / 2 : padX + ((t - minT) / xRange) * (W - padX * 2);
+  const mapY = (p: number) =>
+    pts.length === 1 ? H / 2 : H - padY - ((p - minPrice) / yRange) * (H - padY * 2);
+
+  const polyPoints = pts.map((p) => `${mapX(p.t)},${mapY(p.price)}`).join(" ");
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const delta = last.price - first.price;
+  const deltaPct = first.price > 0 ? (delta / first.price) * 100 : 0;
+  const trendColor = delta > 0 ? colors.error : delta < 0 ? colors.success : colors.onSurfaceTertiary;
+  const trendIcon = delta > 0 ? "trending-up" : delta < 0 ? "trending-down" : "remove";
+
+  return (
+    <View style={styles.chartCard} testID="deal-price-chart">
+      <View style={styles.chartHeader}>
+        <View>
+          <Text style={styles.chartLbl}>CURRENT</Text>
+          <Text style={styles.chartCurrent}>${last.price.toFixed(2)}</Text>
+        </View>
+        <View style={{ alignItems: "flex-end" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <Ionicons name={trendIcon as any} size={14} color={trendColor} />
+            <Text style={[styles.chartDelta, { color: trendColor }]}>
+              {delta === 0
+                ? "stable"
+                : `${delta > 0 ? "+" : ""}${delta.toFixed(2)} (${deltaPct.toFixed(1)}%)`}
+            </Text>
+          </View>
+          <Text style={styles.muted}>
+            {pts.length} {pts.length === 1 ? "point" : "points"}
+          </Text>
+        </View>
+      </View>
+      <Svg width={W} height={H} style={{ alignSelf: "center" }}>
+        {/* gridlines */}
+        <SvgLine x1={padX} y1={padY} x2={padX} y2={H - padY} stroke={colors.border} strokeWidth={1} />
+        <SvgLine
+          x1={padX}
+          y1={H - padY}
+          x2={W - padX}
+          y2={H - padY}
+          stroke={colors.border}
+          strokeWidth={1}
+        />
+        {pts.length > 1 ? (
+          <Polyline
+            points={polyPoints}
+            fill="none"
+            stroke={colors.brand}
+            strokeWidth={2.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : null}
+        {pts.map((p, i) => (
+          <Circle
+            key={i}
+            cx={mapX(p.t)}
+            cy={mapY(p.price)}
+            r={i === pts.length - 1 ? 5 : 3.5}
+            fill={i === pts.length - 1 ? colors.brand : colors.surfaceSecondary}
+            stroke={colors.brand}
+            strokeWidth={2}
+          />
+        ))}
+      </Svg>
+      <View style={styles.chartRange}>
+        <Text style={styles.chartRangeTxt}>min ${minPrice.toFixed(0)}</Text>
+        <Text style={styles.chartRangeTxt}>max ${maxPrice.toFixed(0)}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -840,4 +949,40 @@ const styles = StyleSheet.create({
   },
   priceDisplayVal: { color: colors.onSurface, fontSize: 32, fontWeight: "800" },
   priceDelta: { color: colors.brand, fontSize: 12, fontWeight: "600", marginTop: 2 },
+  chartCard: {
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  chartHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: spacing.sm,
+  },
+  chartLbl: {
+    color: colors.onSurfaceTertiary,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: "700",
+  },
+  chartCurrent: { color: colors.onSurface, fontSize: 24, fontWeight: "800" },
+  chartDelta: { fontSize: 12, fontWeight: "700" },
+  chartRange: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  chartRangeTxt: { color: colors.onSurfaceTertiary, fontSize: 11, fontWeight: "600" },
+  chartEmpty: {
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    alignItems: "center",
+  },
 });
