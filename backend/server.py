@@ -78,8 +78,15 @@ class RegisterPushBody(BaseModel):
     platform: str
     device_token: str
 
+class MarketData(BaseModel):
+    buyer_demand: str = ""
+    seller_competition: str = ""
+    local_price_range: str = ""
+    notes: str = ""
+
 class DealAnalysisResult(BaseModel):
     deal_score: int
+    inferred_title: Optional[str] = None
     estimated_resale_value: float
     max_price_to_pay: float
     expected_profit: float
@@ -88,9 +95,10 @@ class DealAnalysisResult(BaseModel):
     suggested_negotiation_message: str
     recommendation: Literal["buy", "negotiate", "watch", "skip"]
     reasoning: Optional[str] = None
+    market_data: Optional[MarketData] = None
 
 class AnalyzeBody(BaseModel):
-    title: str
+    title: Optional[str] = ""
     price: float
     location: Optional[str] = ""
     category: str = "other"
@@ -117,7 +125,7 @@ class Deal(BaseModel):
     updated_at: datetime
 
 class SaveDealBody(BaseModel):
-    title: str
+    title: Optional[str] = ""
     price: float
     location: Optional[str] = ""
     category: str = "other"
@@ -331,10 +339,11 @@ async def register_push(body: RegisterPushBody, user: dict = Depends(get_current
 # ---------- AI Analysis ----------
 ANALYSIS_SYSTEM_PROMPT = """You are DealHawk AI, an expert second-hand market analyst for Facebook Marketplace deals.
 
-Given a listing's title, price, location, category, condition, seller's description, user notes, and optionally photos, you produce a structured assessment.
+Given a listing's title (optional), price, location, category, condition, seller's description, user notes, and optionally photos, you produce a structured assessment.
 
 Output STRICT JSON with EXACTLY these keys:
 {
+  "inferred_title": "<short item description you determined; copy the user's title if it was given, otherwise infer from photos>",
   "deal_score": <integer 1-10, where 10 = exceptional deal>,
   "estimated_resale_value": <number, realistic resale price in USD>,
   "max_price_to_pay": <number, the max someone should pay to still profit>,
@@ -343,15 +352,24 @@ Output STRICT JSON with EXACTLY these keys:
   "red_flags": ["<short red flag>", "..."],
   "suggested_negotiation_message": "<a friendly, polite message the buyer can send the seller to negotiate>",
   "recommendation": "<one of: buy, negotiate, watch, skip>",
-  "reasoning": "<2-3 sentences explaining the score>"
+  "reasoning": "<2-3 sentences explaining the score>",
+  "market_data": {
+    "buyer_demand": "<1-2 sentences on buyer demand for this item in the buyer's location (cite city/region heuristics; mention if demand is high/medium/low and why)>",
+    "seller_competition": "<1-2 sentences estimating how many similar listings a buyer would find locally and what typical asking prices look like>",
+    "local_price_range": "<typical local resale price range, e.g. '$420-$520 in major US metros'>",
+    "notes": "<any regional caveat, e.g. lower demand in rural areas, seasonality, transport costs>"
+  }
 }
 
 Rules:
+- If no title is provided, you MUST determine the item from the photos and put that in inferred_title (be specific: brand, model, capacity, color if visible).
+- If neither title NOR readable photos are provided, return inferred_title="Unknown item" and a low deal_score with risk_warning explaining that the item can't be identified.
 - Be realistic about resale value (US market). If unsure, lean conservative.
 - If the price already matches resale, score around 5-6 and recommend 'watch' or 'negotiate'.
 - If the deal is great, recommend 'buy' or 'negotiate'.
 - If suspicious (stock photo signs, vague desc, too good to be true, payment off-platform, asks to ship), recommend 'skip' and add red flags.
 - For 'free items', resale value can be positive; recommendation should usually be 'buy' if low risk.
+- market_data: always populate when a non-empty location is given. If no location, return market_data with empty strings.
 - Return ONLY the JSON object, no markdown fences, no commentary.
 """
 
@@ -381,29 +399,53 @@ async def analyze_deal(body: AnalyzeBody, user: dict = Depends(get_current_user)
         raise HTTPException(status_code=500, detail="LLM key not configured")
 
     n_imgs = len([1 for img in body.images[:4] if _parse_image_b64(img)])
-    photo_instr = (
-        f"\n\nIMPORTANT: {n_imgs} listing photo(s) are attached to this message. "
-        "INSPECT EACH PHOTO carefully. Use them to:\n"
-        "- Verify the item matches the title (catch wrong-item bait-and-switch).\n"
-        "- Judge actual condition (scratches, wear, damage, missing accessories) and reconcile vs the seller's stated condition.\n"
-        "- Spot scam indicators (obvious stock photos, watermarked images, screenshots of other listings, blurry/low-effort photos, mismatched backgrounds).\n"
-        "- Identify model/specs (e.g. iPhone storage badge, brand stickers, serial labels) that affect resale value.\n"
-        "Reflect what you SAW in the photos inside the red_flags array and reasoning. "
-        "If photos contradict the seller's description, call it out explicitly."
-        if n_imgs > 0
-        else "\n\nNo photos were attached. Note this in your reasoning if it materially limits confidence."
-    )
+    has_title = bool((body.title or "").strip())
+    if not has_title and n_imgs == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Add a title or at least one photo so we can identify the item.",
+        )
+
+    if n_imgs > 0:
+        photo_instr = (
+            f"\n\nIMPORTANT: {n_imgs} listing photo(s) are attached to this message. "
+            "INSPECT EACH PHOTO carefully. Use them to:\n"
+            "- Verify the item matches the title (catch wrong-item bait-and-switch).\n"
+            "- Judge actual condition (scratches, wear, damage, missing accessories) and reconcile vs the seller's stated condition.\n"
+            "- Spot scam indicators (obvious stock photos, watermarked images, screenshots of other listings, blurry/low-effort photos, mismatched backgrounds).\n"
+            "- Identify model/specs (e.g. iPhone storage badge, brand stickers, serial labels) that affect resale value.\n"
+            "Reflect what you SAW in the photos inside the red_flags array and reasoning. "
+            "If photos contradict the seller's description, call it out explicitly."
+        )
+    else:
+        photo_instr = "\n\nNo photos were attached. Note this in your reasoning since it materially limits confidence."
+
+    if not has_title:
+        photo_instr += (
+            "\n\nThe user DID NOT provide a title. You MUST identify the item solely from the photos "
+            "and populate `inferred_title` with a specific description (brand, model, capacity/size, color)."
+        )
+
+    location_clean = (body.location or "").strip()
+    if location_clean:
+        market_instr = (
+            f"\n\nThe buyer is in: {location_clean}. Populate `market_data` with buyer demand, "
+            "seller competition, local price range, and any regional notes specific to that area."
+        )
+    else:
+        market_instr = "\n\nNo location given. Return market_data with empty strings."
 
     user_prompt = f"""Evaluate this Facebook Marketplace listing.
 
-Title: {body.title}
+Title: {body.title.strip() if has_title else '(not provided — identify from photos)'}
 Asking price: ${body.price}
-Location: {body.location or 'not provided'}
+Location: {location_clean or 'not provided'}
 Category: {body.category}
 Condition: {body.condition or 'not provided'}
 Seller description: {body.seller_description or 'not provided'}
 Buyer notes: {body.notes or 'none'}
 {photo_instr}
+{market_instr}
 
 Return only the JSON object as instructed."""
 
@@ -414,7 +456,7 @@ Return only the JSON object as instructed."""
     ).with_model("anthropic", "claude-sonnet-4-5-20250929")
 
     file_contents = []
-    for img in body.images[:4]:  # cap at 4 images
+    for img in body.images[:4]:
         b64 = _parse_image_b64(img)
         if b64:
             file_contents.append(ImageContent(image_base64=b64))
@@ -431,16 +473,25 @@ Return only the JSON object as instructed."""
     try:
         data = json.loads(cleaned)
     except Exception:
-        # Try to extract first JSON object
         match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if not match:
             raise HTTPException(status_code=502, detail="AI returned non-JSON output")
         data = json.loads(match.group(0))
 
-    # Coerce numeric fields safely
+    md_raw = data.get("market_data") or {}
+    if not isinstance(md_raw, dict):
+        md_raw = {}
+    market = MarketData(
+        buyer_demand=str(md_raw.get("buyer_demand", "")),
+        seller_competition=str(md_raw.get("seller_competition", "")),
+        local_price_range=str(md_raw.get("local_price_range", "")),
+        notes=str(md_raw.get("notes", "")),
+    )
+
     try:
         result = DealAnalysisResult(
             deal_score=int(round(float(data.get("deal_score", 5)))),
+            inferred_title=(str(data.get("inferred_title", "")).strip() or (body.title.strip() if has_title else None)),
             estimated_resale_value=float(data.get("estimated_resale_value", 0) or 0),
             max_price_to_pay=float(data.get("max_price_to_pay", 0) or 0),
             expected_profit=float(data.get("expected_profit", 0) or 0),
@@ -449,6 +500,7 @@ Return only the JSON object as instructed."""
             suggested_negotiation_message=str(data.get("suggested_negotiation_message", "")),
             recommendation=str(data.get("recommendation", "watch")).lower(),
             reasoning=str(data.get("reasoning", "")) if data.get("reasoning") else None,
+            market_data=market,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI response shape invalid: {e}")
@@ -466,10 +518,15 @@ Return only the JSON object as instructed."""
 async def save_deal(body: SaveDealBody, user: dict = Depends(get_current_user)):
     deal_id = f"deal_{uuid.uuid4().hex[:12]}"
     now = now_utc()
+    title = (body.title or "").strip()
+    if not title and body.analysis and body.analysis.inferred_title:
+        title = body.analysis.inferred_title
+    if not title:
+        title = "Untitled listing"
     deal = {
         "deal_id": deal_id,
         "user_id": user["user_id"],
-        "title": body.title,
+        "title": title,
         "price": body.price,
         "location": body.location or "",
         "category": body.category,
@@ -482,7 +539,7 @@ async def save_deal(body: SaveDealBody, user: dict = Depends(get_current_user)):
         "created_at": now,
         "updated_at": now,
     }
-    await db.deals.insert_one(deal.copy())  # insert copy to avoid _id mutation
+    await db.deals.insert_one(deal.copy())
     return Deal(**deal)
 
 @api.get("/deals", response_model=List[Deal])

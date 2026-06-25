@@ -59,8 +59,12 @@ export default function Analyze() {
 
   const submit = async () => {
     setErr(null);
-    if (!title.trim() || !price.trim()) {
-      setErr("Title and price are required");
+    if (!title.trim() && images.length === 0) {
+      setErr("Add a title or at least one photo");
+      return;
+    }
+    if (!price.trim()) {
+      setErr("Price is required");
       return;
     }
     const num = parseFloat(price);
@@ -129,12 +133,35 @@ export default function Analyze() {
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 160 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.label}>TITLE *</Text>
+        <Text style={styles.label}>PHOTOS ({images.length}/4)</Text>
+        <Text style={styles.helper}>Add photos first — AI can identify the item from them.</Text>
+        <View style={styles.imagesRow}>
+          {images.map((uri, i) => (
+            <View key={i} style={styles.imgWrap}>
+              <Image source={{ uri }} style={styles.img} />
+              <Pressable
+                testID={`analyze-img-remove-${i}`}
+                onPress={() => removeImage(i)}
+                style={styles.imgRm}
+              >
+                <Ionicons name="close" size={14} color="#fff" />
+              </Pressable>
+            </View>
+          ))}
+          {images.length < 4 && (
+            <Pressable testID="analyze-img-add" onPress={pickImage} style={styles.imgAdd}>
+              <Ionicons name="add" size={28} color={colors.onSurfaceTertiary} />
+              <Text style={styles.muted}>Add</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Text style={styles.label}>TITLE</Text>
         <TextInput
           testID="analyze-title"
           value={title}
           onChangeText={setTitle}
-          placeholder="e.g. iPhone 13 Pro 256GB Unlocked"
+          placeholder={images.length > 0 ? "Optional — AI will identify from photos" : "e.g. iPhone 13 Pro 256GB Unlocked"}
           placeholderTextColor={colors.onSurfaceTertiary}
           style={styles.input}
         />
@@ -211,28 +238,6 @@ export default function Analyze() {
           style={[styles.input, styles.textArea]}
           multiline
         />
-
-        <Text style={styles.label}>PHOTOS ({images.length}/4)</Text>
-        <View style={styles.imagesRow}>
-          {images.map((uri, i) => (
-            <View key={i} style={styles.imgWrap}>
-              <Image source={{ uri }} style={styles.img} />
-              <Pressable
-                testID={`analyze-img-remove-${i}`}
-                onPress={() => removeImage(i)}
-                style={styles.imgRm}
-              >
-                <Ionicons name="close" size={14} color="#fff" />
-              </Pressable>
-            </View>
-          ))}
-          {images.length < 4 && (
-            <Pressable testID="analyze-img-add" onPress={pickImage} style={styles.imgAdd}>
-              <Ionicons name="add" size={28} color={colors.onSurfaceTertiary} />
-              <Text style={styles.muted}>Add</Text>
-            </Pressable>
-          )}
-        </View>
 
         {err ? <Text style={styles.errBox}>{err}</Text> : null}
       </ScrollView>
@@ -369,6 +374,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: 6,
   },
+  helper: { color: colors.onSurfaceTertiary, fontSize: 12, marginBottom: 8, marginTop: -2 },
   input: {
     backgroundColor: colors.surfaceSecondary,
     color: colors.onSurface,

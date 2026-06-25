@@ -37,6 +37,7 @@ type Deal = {
   status: string;
   analysis?: {
     deal_score: number;
+    inferred_title?: string | null;
     estimated_resale_value: number;
     max_price_to_pay: number;
     expected_profit: number;
@@ -45,6 +46,12 @@ type Deal = {
     suggested_negotiation_message: string;
     recommendation: string;
     reasoning?: string;
+    market_data?: {
+      buyer_demand?: string;
+      seller_competition?: string;
+      local_price_range?: string;
+      notes?: string;
+    } | null;
   } | null;
 };
 
@@ -211,6 +218,54 @@ export default function DealDetail() {
                 </>
               ) : null}
 
+              {a.market_data &&
+              (a.market_data.buyer_demand ||
+                a.market_data.seller_competition ||
+                a.market_data.local_price_range ||
+                a.market_data.notes) ? (
+                <>
+                  <Text style={styles.sectionTitle}>MARKET DATA {deal.location ? `• ${deal.location.toUpperCase()}` : ""}</Text>
+                  <View style={styles.marketCard} testID="deal-market-data">
+                    {a.market_data.local_price_range ? (
+                      <View style={styles.marketRow}>
+                        <Ionicons name="pricetag" size={14} color={colors.brand} />
+                        <View style={styles.marketCol}>
+                          <Text style={styles.marketLbl}>LOCAL PRICE RANGE</Text>
+                          <Text style={styles.marketTxt}>{a.market_data.local_price_range}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {a.market_data.buyer_demand ? (
+                      <View style={styles.marketRow}>
+                        <Ionicons name="trending-up" size={14} color={colors.success} />
+                        <View style={styles.marketCol}>
+                          <Text style={styles.marketLbl}>BUYER DEMAND</Text>
+                          <Text style={styles.marketTxt}>{a.market_data.buyer_demand}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {a.market_data.seller_competition ? (
+                      <View style={styles.marketRow}>
+                        <Ionicons name="people" size={14} color={colors.info} />
+                        <View style={styles.marketCol}>
+                          <Text style={styles.marketLbl}>SELLER COMPETITION</Text>
+                          <Text style={styles.marketTxt}>{a.market_data.seller_competition}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {a.market_data.notes ? (
+                      <View style={styles.marketRow}>
+                        <Ionicons name="information-circle" size={14} color={colors.onSurfaceTertiary} />
+                        <View style={styles.marketCol}>
+                          <Text style={styles.marketLbl}>REGIONAL NOTES</Text>
+                          <Text style={styles.marketTxt}>{a.market_data.notes}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </>
+              ) : null}
+
               {a.suggested_negotiation_message ? (
                 <>
                   <Text style={styles.sectionTitle}>NEGOTIATION MESSAGE</Text>
@@ -359,6 +414,24 @@ const styles = StyleSheet.create({
   },
   flagRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", marginBottom: 6 },
   flagTxt: { color: colors.onSurfaceSecondary, fontSize: 13, flex: 1 },
+  marketCard: {
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.md,
+  },
+  marketRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  marketCol: { flex: 1 },
+  marketLbl: {
+    color: colors.onSurfaceTertiary,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  marketTxt: { color: colors.onSurface, fontSize: 13, lineHeight: 19 },
   msgBox: {
     backgroundColor: colors.surfaceSecondary,
     borderRadius: radius.md,
