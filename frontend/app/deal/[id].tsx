@@ -278,7 +278,7 @@ export default function DealDetail() {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
-      setDeal(updated);
+      setDeal(normalizeDeal(updated));
     } catch (e: any) {
       setErr(e?.message || "Update failed");
     } finally {
