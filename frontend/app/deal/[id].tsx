@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -18,13 +18,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { apiFetch } from "@/src/api/client";
+import { useTheme } from "@/src/contexts/ThemeContext";
 import {
-  colors,
   spacing,
   radius,
   statusOptions,
   scoreColor,
   recommendationColor,
+  ColorPalette,
 } from "@/src/theme";
 
 type Deal = {
@@ -43,6 +44,7 @@ type Deal = {
   updated_at: string;
   last_checked_at?: string | null;
   price_history?: Array<{ price: number; at: string }>;
+  inferred_fields?: string[];
   analysis?: {
     deal_score: number;
     inferred_title?: string | null;
@@ -85,6 +87,8 @@ export default function DealDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [deal, setDeal] = useState<Deal | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -252,7 +256,7 @@ export default function DealDetail() {
             ]}
             testID="deal-score-ring"
           >
-            <Text style={[styles.scoreNum, { color: scoreColor(a?.deal_score || 0) }]}>
+            <Text style={[styles.scoreNum, { color: scoreColor(a?.deal_score || 0, colors) }]}>
               {a?.deal_score ?? "—"}
             </Text>
             <Text style={styles.scoreLbl}>/10</Text>
@@ -264,7 +268,7 @@ export default function DealDetail() {
           <View
             style={[
               styles.recPill,
-              { backgroundColor: recommendationColor(a?.recommendation) },
+              { backgroundColor: recommendationColor(a?.recommendation, colors) },
             ]}
           >
             <Text style={styles.recTxt}>{(a?.recommendation || "—").toUpperCase()}</Text>
@@ -288,6 +292,17 @@ export default function DealDetail() {
               </View>
             ) : null}
           </View>
+
+          {deal.inferred_fields && deal.inferred_fields.length > 0 ? (
+            <View style={styles.chipRow} testID="deal-inferred-chips">
+              {deal.inferred_fields.map((f) => (
+                <View key={f} style={styles.aiChip} testID={`inferred-chip-${f}`}>
+                  <Ionicons name="sparkles" size={10} color={colors.brand} />
+                  <Text style={styles.aiChipTxt}>{f.replace("_", " ")} from photo</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           <View style={styles.actionsRow}>
             <Pressable
@@ -607,6 +622,8 @@ function PriceHoldButton({
   onPress: () => void;
   onHoldStep: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [holding, setHolding] = useState(false);
   React.useEffect(() => {
     if (!holding) return;
@@ -627,6 +644,8 @@ function PriceHoldButton({
 }
 
 function PriceHistoryChart({ history }: { history: Array<{ price: number; at: string }> }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const W = 320;
   const H = 140;
   const padX = 28;
@@ -726,7 +745,8 @@ function PriceHistoryChart({ history }: { history: Array<{ price: number; at: st
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   center: { alignItems: "center", justifyContent: "center" },
   headerBar: {
@@ -857,6 +877,25 @@ const styles = StyleSheet.create({
   },
   metaItem: { flexDirection: "row", gap: 6, alignItems: "center" },
   metaTxt: { color: colors.onSurfaceTertiary, fontSize: 12 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: spacing.md },
+  aiChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
+  aiChipTxt: {
+    color: colors.brand,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "capitalize",
+  },
   actionsRow: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap", marginBottom: spacing.sm },
   actionBtn: {
     flexDirection: "row",

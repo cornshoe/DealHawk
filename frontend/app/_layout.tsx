@@ -9,7 +9,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider, useAuth } from "@/src/contexts/AuthContext";
-import { colors } from "@/src/theme";
+import { ThemeProvider, useTheme } from "@/src/contexts/ThemeContext";
+import { colors as defaultColors } from "@/src/theme";
 
 
 // Disable logbox errors etc so that users can see the app
@@ -88,6 +89,25 @@ function NotificationTapHandler() {
   return null;
 }
 
+function ThemedShell() {
+  const { colors } = useTheme();
+  return (
+    <AuthProvider>
+      <View style={{ flex: 1, backgroundColor: colors.surface }}>
+        <AuthGate />
+        <NotificationTapHandler />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.surface },
+            animation: "fade",
+          }}
+        />
+      </View>
+    </AuthProvider>
+  );
+}
+
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
 
@@ -97,26 +117,14 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  // If the CDN is unreachable we fall through on error rather than wedging
-  // the app — icons will tofu, but the app still boots.
   if (!loaded && !error) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.surface }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: defaultColors.surface }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <View style={{ flex: 1, backgroundColor: colors.surface }}>
-            <AuthGate />
-            <NotificationTapHandler />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.surface },
-                animation: "fade",
-              }}
-            />
-          </View>
-        </AuthProvider>
+        <ThemeProvider>
+          <ThemedShell />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

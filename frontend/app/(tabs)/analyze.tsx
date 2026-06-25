@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { apiFetch } from "@/src/api/client";
-import { colors, spacing, radius, categoryOptions } from "@/src/theme";
+import { useTheme } from "@/src/contexts/ThemeContext";
+import { spacing, radius, categoryOptions, ColorPalette } from "@/src/theme";
 
 const CATS = categoryOptions.filter((c) => c.key !== "all");
 
@@ -25,6 +26,8 @@ export default function Analyze() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ url?: string }>();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [location, setLocation] = useState("");
@@ -302,6 +305,8 @@ function LocationAutocomplete({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [text, setText] = useState(value);
   const [items, setItems] = useState<{ label: string }[]>([]);
   const [open, setOpen] = useState(false);
@@ -390,7 +395,8 @@ function LocationAutocomplete({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { padding: spacing.lg, paddingBottom: spacing.sm },
   title: { color: colors.onSurface, fontSize: 22, fontWeight: "800", letterSpacing: 3 },

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { apiFetch } from "@/src/api/client";
-import { colors, spacing, radius, categoryOptions, scoreColor, recommendationColor } from "@/src/theme";
+import { useTheme } from "@/src/contexts/ThemeContext";
+import { spacing, radius, categoryOptions, scoreColor, recommendationColor, ColorPalette } from "@/src/theme";
 
 function relTime(iso?: string | null): string {
   if (!iso) return "";
@@ -56,6 +57,8 @@ type DashboardData = {
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -190,7 +193,7 @@ export default function Dashboard() {
                   <View
                     style={[
                       styles.scoreBadge,
-                      { backgroundColor: scoreColor(d.analysis?.deal_score || 0) },
+                      { backgroundColor: scoreColor(d.analysis?.deal_score || 0, colors) },
                     ]}
                   >
                     <Text style={styles.scoreTxt}>{d.analysis?.deal_score ?? "-"}</Text>
@@ -205,7 +208,7 @@ export default function Dashboard() {
                       <Text
                         style={[
                           styles.dealMetaTxt,
-                          { color: recommendationColor(d.analysis?.recommendation) },
+                          { color: recommendationColor(d.analysis?.recommendation, colors) },
                         ]}
                       >
                         {(d.analysis?.recommendation || "—").toUpperCase()}
@@ -234,7 +237,8 @@ export default function Dashboard() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: {
     flexDirection: "row",

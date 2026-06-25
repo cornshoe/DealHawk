@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,13 +14,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "@/src/contexts/AuthContext";
-import { colors, spacing, radius } from "@/src/theme";
+import { useTheme } from "@/src/contexts/ThemeContext";
+import { spacing, radius, ColorPalette } from "@/src/theme";
 
 type Mode = "login" | "signup";
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
   const { login, signup, loginWithGoogle } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -163,7 +166,8 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   scroll: { paddingHorizontal: spacing.xl, alignItems: "stretch" },
   logoBadge: {

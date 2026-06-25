@@ -132,6 +132,7 @@ class Deal(BaseModel):
     analysis: Optional[DealAnalysisResult] = None
     last_checked_at: Optional[datetime] = None
     price_history: List[PricePoint] = Field(default_factory=list)
+    inferred_fields: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -563,28 +564,50 @@ async def save_deal(body: SaveDealBody, user: dict = Depends(get_current_user)):
     a = body.analysis
 
     title = (body.title or "").strip()
+    title_inferred = False
     if not title and a and a.inferred_title:
         title = a.inferred_title
+        title_inferred = True
     if not title:
         title = "Untitled listing"
 
     price = float(body.price) if body.price and float(body.price) > 0 else 0.0
+    price_inferred = False
     if price <= 0 and a and a.inferred_price and a.inferred_price > 0:
         price = float(a.inferred_price)
+        price_inferred = True
 
     category = (body.category or "").strip().lower()
+    category_inferred = False
     if not category and a and a.inferred_category:
         category = a.inferred_category
+        category_inferred = True
     if not category:
         category = "other"
 
     location = (body.location or "").strip()
+    location_inferred = False
     if not location and a and a.inferred_location:
         location = a.inferred_location
+        location_inferred = True
 
     seller_description = (body.seller_description or "").strip()
+    seller_description_inferred = False
     if not seller_description and a and a.inferred_seller_description:
         seller_description = a.inferred_seller_description
+        seller_description_inferred = True
+
+    inferred_fields = []
+    if title_inferred:
+        inferred_fields.append("title")
+    if price_inferred:
+        inferred_fields.append("price")
+    if category_inferred:
+        inferred_fields.append("category")
+    if location_inferred:
+        inferred_fields.append("location")
+    if seller_description_inferred:
+        inferred_fields.append("seller_description")
 
     deal = {
         "deal_id": deal_id,
@@ -602,6 +625,7 @@ async def save_deal(body: SaveDealBody, user: dict = Depends(get_current_user)):
         "analysis": a.model_dump() if a else None,
         "last_checked_at": None,
         "price_history": [{"price": price, "at": now}] if price > 0 else [],
+        "inferred_fields": inferred_fields,
         "created_at": now,
         "updated_at": now,
     }

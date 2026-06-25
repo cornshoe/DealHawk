@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { apiFetch } from "@/src/api/client";
-import { colors, spacing, radius, statusOptions, scoreColor, recommendationColor } from "@/src/theme";
+import { useTheme } from "@/src/contexts/ThemeContext";
+import { spacing, radius, statusOptions, scoreColor, recommendationColor, ColorPalette } from "@/src/theme";
 
 function relTime(iso?: string | null): string {
   if (!iso) return "";
@@ -42,6 +43,8 @@ type Deal = {
 export default function Board() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [status, setStatus] = useState("new");
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +138,7 @@ export default function Board() {
               <View
                 style={[
                   styles.scoreBadge,
-                  { backgroundColor: scoreColor(d.analysis?.deal_score || 0) },
+                  { backgroundColor: scoreColor(d.analysis?.deal_score || 0, colors) },
                 ]}
               >
                 <Text style={styles.scoreTxt}>{d.analysis?.deal_score ?? "-"}</Text>
@@ -150,7 +153,7 @@ export default function Board() {
                   <Text
                     style={[
                       styles.dealMetaTxt,
-                      { color: recommendationColor(d.analysis?.recommendation) },
+                      { color: recommendationColor(d.analysis?.recommendation, colors) },
                     ]}
                   >
                     {(d.analysis?.recommendation || "—").toUpperCase()}
@@ -177,7 +180,8 @@ export default function Board() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   title: { color: colors.onSurface, fontSize: 22, fontWeight: "800", letterSpacing: 3 },

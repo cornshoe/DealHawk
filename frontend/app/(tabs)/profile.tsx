@@ -1,15 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import { useAuth } from "@/src/contexts/AuthContext";
+import { useTheme } from "@/src/contexts/ThemeContext";
 import { apiFetch } from "@/src/api/client";
-import { colors, spacing, radius } from "@/src/theme";
+import { spacing, radius, ColorPalette } from "@/src/theme";
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { colors, mode, setMode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [pushStatus, setPushStatus] = useState<"idle" | "registering" | "ready" | "denied" | "error">(
     "idle"
   );
@@ -65,6 +68,53 @@ export default function Profile() {
           <Text style={styles.email} testID="profile-email">{user?.email}</Text>
         </View>
 
+        <Text style={styles.sectionTitle}>APPEARANCE</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Ionicons name={mode === "dark" ? "moon" : "sunny"} size={20} color={colors.brand} />
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={styles.rowTitle}>Theme</Text>
+              <Text style={styles.rowSub}>
+                {mode === "dark" ? "Dark — night-mode-first" : "Light — bright for daytime"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.themeToggleRow} testID="profile-theme-toggle">
+            <Pressable
+              testID="profile-theme-dark"
+              onPress={() => setMode("dark")}
+              style={[styles.themeBtn, mode === "dark" && styles.themeBtnActive]}
+            >
+              <Ionicons
+                name="moon"
+                size={16}
+                color={mode === "dark" ? "#fff" : colors.onSurfaceTertiary}
+              />
+              <Text
+                style={[styles.themeBtnTxt, mode === "dark" && styles.themeBtnTxtActive]}
+              >
+                DARK
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="profile-theme-light"
+              onPress={() => setMode("light")}
+              style={[styles.themeBtn, mode === "light" && styles.themeBtnActive]}
+            >
+              <Ionicons
+                name="sunny"
+                size={16}
+                color={mode === "light" ? "#fff" : colors.onSurfaceTertiary}
+              />
+              <Text
+                style={[styles.themeBtnTxt, mode === "light" && styles.themeBtnTxtActive]}
+              >
+                LIGHT
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
         <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
         <View style={styles.card}>
           <View style={styles.row}>
@@ -108,61 +158,89 @@ export default function Profile() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  title: { color: colors.onSurface, fontSize: 22, fontWeight: "800", letterSpacing: 3 },
-  card: {
-    backgroundColor: colors.surfaceSecondary,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.brandTertiary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
-  },
-  name: { color: colors.onSurface, fontSize: 20, fontWeight: "800" },
-  email: { color: colors.onSurfaceTertiary, fontSize: 13, marginTop: 4 },
-  sectionTitle: {
-    color: colors.onSurfaceTertiary,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
-  },
-  row: { flexDirection: "row", alignItems: "center" },
-  rowTitle: { color: colors.onSurface, fontSize: 14, fontWeight: "700" },
-  rowSub: { color: colors.onSurfaceTertiary, fontSize: 12, marginTop: 2 },
-  secBtn: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: spacing.md,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.brandTertiary,
-  },
-  secBtnTxt: { color: colors.brand, fontWeight: "800", letterSpacing: 1.5, fontSize: 12 },
-  msg: { color: colors.success, fontSize: 12, marginTop: spacing.sm, textAlign: "center" },
-  about: { color: colors.onSurfaceSecondary, fontSize: 13, lineHeight: 20 },
-  logout: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  logoutTxt: { color: colors.error, fontWeight: "800", letterSpacing: 1.5 },
-});
+const makeStyles = (colors: ColorPalette) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface },
+    header: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+    title: { color: colors.onSurface, fontSize: 22, fontWeight: "800", letterSpacing: 3 },
+    card: {
+      backgroundColor: colors.surfaceSecondary,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      marginBottom: spacing.lg,
+    },
+    avatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.brandTertiary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: spacing.md,
+    },
+    name: { color: colors.onSurface, fontSize: 20, fontWeight: "800" },
+    email: { color: colors.onSurfaceTertiary, fontSize: 13, marginTop: 4 },
+    sectionTitle: {
+      color: colors.onSurfaceTertiary,
+      fontSize: 11,
+      letterSpacing: 1.5,
+      fontWeight: "700",
+      marginBottom: spacing.sm,
+    },
+    row: { flexDirection: "row", alignItems: "center" },
+    rowTitle: { color: colors.onSurface, fontSize: 14, fontWeight: "700" },
+    rowSub: { color: colors.onSurfaceTertiary, fontSize: 12, marginTop: 2 },
+    themeToggleRow: {
+      flexDirection: "row",
+      marginTop: spacing.md,
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      padding: 4,
+      gap: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    themeBtn: {
+      flex: 1,
+      flexDirection: "row",
+      gap: 6,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 12,
+      borderRadius: radius.sm,
+    },
+    themeBtnActive: { backgroundColor: colors.brand },
+    themeBtnTxt: {
+      color: colors.onSurfaceTertiary,
+      fontWeight: "800",
+      letterSpacing: 1.5,
+      fontSize: 12,
+    },
+    themeBtnTxtActive: { color: "#fff" },
+    secBtn: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: spacing.md,
+      paddingVertical: 12,
+      borderRadius: radius.md,
+      backgroundColor: colors.brandTertiary,
+    },
+    secBtnTxt: { color: colors.brand, fontWeight: "800", letterSpacing: 1.5, fontSize: 12 },
+    msg: { color: colors.success, fontSize: 12, marginTop: spacing.sm, textAlign: "center" },
+    about: { color: colors.onSurfaceSecondary, fontSize: 13, lineHeight: 20 },
+    logout: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 16,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.error,
+    },
+    logoutTxt: { color: colors.error, fontWeight: "800", letterSpacing: 1.5 },
+  });

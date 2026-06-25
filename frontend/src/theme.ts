@@ -1,5 +1,5 @@
-// Centralized design tokens — sourced from /app/design_guidelines.json
-export const colors = {
+// Centralized design tokens — dark (default) + light palette
+const darkPalette = {
   surface: "#0F0F13",
   onSurface: "#F3F4F6",
   surfaceSecondary: "#1C1C22",
@@ -21,6 +21,34 @@ export const colors = {
   divider: "#1F2937",
 };
 
+const lightPalette: typeof darkPalette = {
+  surface: "#F8FAFC",
+  onSurface: "#0F172A",
+  surfaceSecondary: "#FFFFFF",
+  onSurfaceSecondary: "#1F2937",
+  surfaceTertiary: "#E2E8F0",
+  onSurfaceTertiary: "#475569",
+  brand: "#EA580C",
+  brandPrimary: "#EA580C",
+  brandSecondary: "#C2410C",
+  brandTertiary: "rgba(234, 88, 12, 0.12)",
+  onBrandPrimary: "#FFFFFF",
+  onBrandTertiary: "#C2410C",
+  success: "#059669",
+  warning: "#D97706",
+  error: "#DC2626",
+  info: "#2563EB",
+  border: "#E2E8F0",
+  borderStrong: "#CBD5E1",
+  divider: "#E2E8F0",
+};
+
+export type ColorPalette = typeof darkPalette;
+export const darkColors = darkPalette;
+export const lightColors = lightPalette;
+// Default export kept for backward compatibility (dark)
+export const colors = darkPalette;
+
 export const spacing = {
   xs: 4,
   sm: 8,
@@ -39,32 +67,32 @@ export const radius = {
 };
 
 export const fonts = {
-  display: "BarlowCondensed_700Bold", // condensed display
+  display: "BarlowCondensed_700Bold",
   body: "DMSans_400Regular",
   bodyMedium: "DMSans_500Medium",
   bodyBold: "DMSans_700Bold",
 };
 
-export const recommendationColor = (rec?: string) => {
+export const recommendationColor = (rec?: string, c: ColorPalette = colors) => {
   switch (rec) {
     case "buy":
-      return colors.success;
+      return c.success;
     case "negotiate":
-      return colors.brand;
+      return c.brand;
     case "watch":
-      return colors.info;
+      return c.info;
     case "skip":
-      return colors.error;
+      return c.error;
     default:
-      return colors.onSurfaceTertiary;
+      return c.onSurfaceTertiary;
   }
 };
 
-export const scoreColor = (score: number) => {
-  if (score >= 8) return colors.success;
-  if (score >= 6) return colors.brand;
-  if (score >= 4) return colors.warning;
-  return colors.error;
+export const scoreColor = (score: number, c: ColorPalette = colors) => {
+  if (score >= 8) return c.success;
+  if (score >= 6) return c.brand;
+  if (score >= 4) return c.warning;
+  return c.error;
 };
 
 export const statusOptions = [
