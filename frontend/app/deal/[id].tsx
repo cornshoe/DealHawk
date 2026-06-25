@@ -43,7 +43,7 @@ type Deal = {
   created_at: string;
   updated_at: string;
   last_checked_at?: string | null;
-  price_history?: Array<{ price: number; at: string }>;
+  price_history?: { price: number; at: string }[];
   inferred_fields?: string[];
   analysis?: {
     deal_score: number;
@@ -245,7 +245,7 @@ export default function DealDetail() {
     if (!deal?.listing_url) return;
     try {
       await Linking.openURL(deal.listing_url);
-    } catch (e: any) {
+    } catch {
       setErr("Could not open link");
     }
   };
@@ -715,7 +715,7 @@ function PriceHoldButton({
   );
 }
 
-function PriceHistoryChart({ history }: { history: Array<{ price: number; at: string }> }) {
+function PriceHistoryChart({ history }: { history: { price: number; at: string }[] }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const W = 320;

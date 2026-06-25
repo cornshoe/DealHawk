@@ -335,8 +335,9 @@ function LocationAutocomplete({
         const r = await apiFetch<{ results: { label: string }[] }>(
           `/locations/search?q=${encodeURIComponent(text.trim())}`
         );
-        setItems(r.results);
-        setOpen(r.results.length > 0);
+        const arr = Array.isArray(r?.results) ? r.results.filter((x: any) => x && typeof x.label === "string") : [];
+        setItems(arr);
+        setOpen(arr.length > 0);
       } catch {
         setItems([]);
       } finally {

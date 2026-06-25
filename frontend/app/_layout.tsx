@@ -67,19 +67,26 @@ function NotificationTapHandler() {
   useEffect(() => {
     if (Platform.OS === "web") return;
 
+    const handleDeepLink = (url?: string) => {
+      if (!url) return;
+      if (url.startsWith("http")) {
+        Linking.openURL(url).catch(() => {});
+      } else {
+        router.push(url as any);
+      }
+    };
+
     const tapSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = (response.notification.request.content.data || {}) as Record<string, any>;
       const url = (data.deeplink || data.action_url) as string | undefined;
-      if (!url) return;
-      url.startsWith("http") ? Linking.openURL(url) : router.push(url as any);
+      handleDeepLink(url);
     });
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response) return;
       const data = (response.notification.request.content.data || {}) as Record<string, any>;
       const url = (data.deeplink || data.action_url) as string | undefined;
-      if (!url) return;
-      url.startsWith("http") ? Linking.openURL(url) : router.push(url as any);
+      handleDeepLink(url);
     });
 
     return () => {

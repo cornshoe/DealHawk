@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend stabilization re-test for DealHawk AI. All 6 requested scenarios PASS with zero console errors and zero pageerror events. (1) Login via smoke@test.com / pass1234 redirects to /dashboard. (2) Tab navigation DASH → ANALYZE → BOARD → PROFILE → DASH all reach the correct routes with no red-screen. (3) Opened seeded deal deal_eeb1f48e5e1c (Vintage radio) from Dashboard — Deal Detail renders score ring (testID=deal-score-ring), price-history chart (testID=deal-price-chart) showing 4 points / $75 current / -6.3% / min $65 / max $80, the 6 status chips (testID=deal-status-{new,watching,messaged,purchased,sold,skipped}) with 'New' active, and the 'REFRESH MARKET DATA' button (testID=deal-refresh-ai). The deal-market-data card itself does NOT render because market_data is empty for this seed deal — that is expected (conditional render at deal/[id].tsx:459); the user-visible 'Refresh market data' CTA is present and operable. (4) Analyze location autocomplete defensive parsing verified: 'Sa' → 5 suggestions, 'San Francisco' → 6 suggestions, 'zzzqqq123' → 0 suggestions and silent close (no crash, no console error) — the new r?.results filter does its job. (5) Profile theme toggle Dark ↔ Light updates the UI immediately (theme card label switches from 'Dark — night-mode-first' to 'Light — bright for daytime', active button visually swaps, all surface colors flip) and produces no crash. (6) Re-opened Deal Detail after toggling to LIGHT — chart, score ring, refresh button, all 6 status chips render correctly in light theme; no errors. No deprecated-package issues introduced this iteration; no SafeAreaView issues; no Text-not-wrapped issues.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/tmp/03_deal_dark.png",
+    "/tmp/04_analyze.png",
+    "/tmp/05_profile_light.png",
+    "/tmp/05_profile_dark.png",
+    "/tmp/06_deal_light.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Stabilization fixes from this iteration verified end-to-end. _layout.tsx handleDeepLink refactor + Linking.openURL(...).catch(()=>{}) is sound; cold-tap path via getLastNotificationResponseAsync now shares the same code path as the live listener. deal/[id].tsx type-annotation change ({...}[]) is purely cosmetic and behavior is unchanged; openListing catch without `e` compiles cleanly. analyze.tsx Nominatim guard (r?.results filtered to objects with string `label`) correctly handles empty/malformed responses — verified live with garbage query 'zzzqqq123' returning 0 items without throwing.",
+    "Pre-existing comment from iteration_1 still stands: deal/[id].tsx submitStatusChoice() at line ~281 calls setDeal(updated) without routing through normalizeDeal() while other call sites do. Not triggered by this iteration's flows but worth a one-line follow-up for consistency."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (frontend-only run per request)", "frontend": "100% (6/6 scenarios)" },
+  "seed_data_creation": "None. Used existing seeded deals (deal_eeb1f48e5e1c, deal_056405ae08a2) belonging to smoke@test.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Tab labels in the bottom bar are UPPERCASE (DASH, ANALYZE, BOARD, PROFILE) — use page.get_by_text('DASH', exact=True).last (etc.) or testID=`dashboard-deal-{deal_id}` for deal cards. Auth testIDs: auth-input-email, auth-input-password, auth-submit-button. Deal Detail testIDs: deal-score-ring, deal-price-chart, deal-market-data (conditional), deal-refresh-ai (the 'Refresh market data' button), deal-status-{new|watching|messaged|purchased|sold|skipped}, deal-back. Profile theme testIDs: profile-theme-dark, profile-theme-light. Analyze location testIDs: analyze-location (input) and location-item-{i} (dropdown items). Body bgcolor in CSS is transparent (rgba(0,0,0,0)) because RN sets colors on the root View, not <body> — assert theme via screenshot or the visible theme label text, not via getComputedStyle(document.body). For seed deal Vintage radio: 4 price-history points, no populated market_data (so deal-market-data card is hidden — that's correct UX).",
+  "rca_of_issue": "n/a — no new regressions found. The three fixes in this iteration (_layout.tsx deep-link refactor, deal/[id].tsx type tidy-up + unused catch param removal, analyze.tsx Nominatim defensive parsing) all behave correctly under live tests."
+}
