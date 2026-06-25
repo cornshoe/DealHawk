@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  Modal,
+  Linking,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
@@ -33,8 +35,12 @@ type Deal = {
   condition: string;
   seller_description: string;
   notes: string;
+  listing_url: string;
   images: string[];
   status: string;
+  created_at: string;
+  updated_at: string;
+  last_checked_at?: string | null;
   analysis?: {
     deal_score: number;
     inferred_title?: string | null;
@@ -55,6 +61,24 @@ type Deal = {
   } | null;
 };
 
+function relTime(iso?: string | null): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "—";
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 60) return "just now";
+  const m = Math.floor(diffSec / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  const y = Math.floor(d / 365);
+  return `${y}y ago`;
+}
+
 export default function DealDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -63,6 +87,10 @@ export default function DealDetail() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [refreshingAi, setRefreshingAi] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [priceDraft, setPriceDraft] = useState<number>(0);
+  const [priceStep, setPriceStep] = useState<"initial" | "adjust">("initial");
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +145,68 @@ export default function DealDetail() {
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
+  };
+
+  const refreshMarketData = async () => {
+    if (!deal || refreshingAi) return;
+    setRefreshingAi(true);
+    setErr(null);
+    try {
+      const updated = await apiFetch<Deal>(`/deals/${deal.deal_id}/refresh-analysis`, {
+        method: "POST",
+      });
+      setDeal(updated);
+    } catch (e: any) {
+      setErr(e?.message || "Refresh failed");
+    } finally {
+      setRefreshingAi(false);
+    }
+  };
+
+  const openListing = async () => {
+    if (!deal?.listing_url) return;
+    try {
+      await Linking.openURL(deal.listing_url);
+    } catch (e: any) {
+      setErr("Could not open link");
+    }
+  };
+
+  const startStatusRefresh = async () => {
+    if (!deal?.listing_url) {
+      setStatusModalOpen(true);
+      return;
+    }
+    try {
+      await Linking.openURL(deal.listing_url);
+    } catch {}
+    // Open the modal so when user returns, the choices are ready.
+    setStatusModalOpen(true);
+  };
+
+  const submitStatusChoice = async (
+    choice: "sold" | "active" | "price_changed",
+    newPrice?: number
+  ) => {
+    if (!deal) return;
+    const patch: any = { mark_checked: true };
+    if (choice === "sold") patch.status = "sold";
+    if (choice === "active") patch.status = deal.status === "new" ? "watching" : deal.status;
+    if (choice === "price_changed" && typeof newPrice === "number") {
+      patch.price = newPrice;
+    }
+    try {
+      const updated = await apiFetch<Deal>(`/deals/${deal.deal_id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setDeal(updated);
+    } catch (e: any) {
+      setErr(e?.message || "Update failed");
+    } finally {
+      setStatusModalOpen(false);
+      setPriceStep("initial");
+    }
   };
 
   if (loading) {
@@ -180,6 +270,58 @@ export default function DealDetail() {
         </LinearGradient>
 
         <View style={{ padding: spacing.lg }}>
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="calendar-outline" size={14} color={colors.onSurfaceTertiary} />
+              <Text style={styles.metaTxt} testID="deal-added-ticker">
+                Added {relTime(deal.created_at)}
+              </Text>
+            </View>
+            {deal.last_checked_at ? (
+              <View style={styles.metaItem}>
+                <Ionicons name="refresh" size={14} color={colors.onSurfaceTertiary} />
+                <Text style={styles.metaTxt} testID="deal-checked-ticker">
+                  Checked {relTime(deal.last_checked_at)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.actionsRow}>
+            <Pressable
+              testID="deal-refresh-ai"
+              onPress={refreshMarketData}
+              disabled={refreshingAi}
+              style={[styles.actionBtn, refreshingAi && { opacity: 0.6 }]}
+            >
+              {refreshingAi ? (
+                <ActivityIndicator color={colors.brand} size="small" />
+              ) : (
+                <Ionicons name="sparkles" size={14} color={colors.brand} />
+              )}
+              <Text style={styles.actionTxt}>
+                {refreshingAi ? "ANALYZING…" : "REFRESH MARKET DATA"}
+              </Text>
+            </Pressable>
+            {deal.listing_url ? (
+              <Pressable testID="deal-open-listing" onPress={openListing} style={styles.actionBtn}>
+                <Ionicons name="open-outline" size={14} color={colors.brand} />
+                <Text style={styles.actionTxt}>OPEN LISTING</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {deal.listing_url ? (
+            <Pressable
+              testID="deal-refresh-status"
+              onPress={startStatusRefresh}
+              style={styles.refreshStatusBtn}
+            >
+              <Ionicons name="repeat" size={16} color="#fff" />
+              <Text style={styles.refreshStatusTxt}>REFRESH STATUS IN LISTING</Text>
+            </Pressable>
+          ) : null}
+
           {a && (
             <>
               <View style={styles.metricsRow}>
@@ -340,7 +482,138 @@ export default function DealDetail() {
           ) : null}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={statusModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setStatusModalOpen(false);
+          setPriceStep("initial");
+        }}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => {
+            setStatusModalOpen(false);
+            setPriceStep("initial");
+          }}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {priceStep === "initial" ? (
+              <>
+                <Text style={styles.modalTitle}>Did it sell?</Text>
+                <Text style={styles.modalSub}>
+                  Tell us what you saw on the listing so we update your board.
+                </Text>
+                <Pressable
+                  testID="status-modal-sold"
+                  onPress={() => submitStatusChoice("sold")}
+                  style={[styles.modalBtn, { borderColor: colors.error }]}
+                >
+                  <Ionicons name="checkmark-done" size={18} color={colors.error} />
+                  <Text style={[styles.modalBtnTxt, { color: colors.error }]}>SOLD</Text>
+                </Pressable>
+                <Pressable
+                  testID="status-modal-active"
+                  onPress={() => submitStatusChoice("active")}
+                  style={[styles.modalBtn, { borderColor: colors.success }]}
+                >
+                  <Ionicons name="pulse" size={18} color={colors.success} />
+                  <Text style={[styles.modalBtnTxt, { color: colors.success }]}>STILL ACTIVE</Text>
+                </Pressable>
+                <Pressable
+                  testID="status-modal-price-changed"
+                  onPress={() => {
+                    setPriceDraft(deal.price);
+                    setPriceStep("adjust");
+                  }}
+                  style={[styles.modalBtn, { borderColor: colors.brand }]}
+                >
+                  <Ionicons name="cash" size={18} color={colors.brand} />
+                  <Text style={[styles.modalBtnTxt, { color: colors.brand }]}>PRICE CHANGED</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Adjust new price</Text>
+                <Text style={styles.modalSub}>Hold the buttons to change quickly.</Text>
+                <View style={styles.priceAdjustRow}>
+                  <PriceHoldButton
+                    testID="status-modal-price-down"
+                    icon="remove"
+                    onPress={() => setPriceDraft((p) => Math.max(0, +(p - 1).toFixed(2)))}
+                    onHoldStep={() => setPriceDraft((p) => Math.max(0, +(p - 5).toFixed(2)))}
+                  />
+                  <View style={styles.priceDisplay}>
+                    <Text style={styles.priceDisplayLbl}>NEW PRICE</Text>
+                    <Text style={styles.priceDisplayVal} testID="status-modal-price-value">
+                      ${priceDraft.toFixed(2)}
+                    </Text>
+                    <Text style={styles.priceDelta}>
+                      {priceDraft === deal.price
+                        ? "no change"
+                        : priceDraft > deal.price
+                        ? `+$${(priceDraft - deal.price).toFixed(2)}`
+                        : `−$${(deal.price - priceDraft).toFixed(2)}`}
+                    </Text>
+                  </View>
+                  <PriceHoldButton
+                    testID="status-modal-price-up"
+                    icon="add"
+                    onPress={() => setPriceDraft((p) => +(p + 1).toFixed(2))}
+                    onHoldStep={() => setPriceDraft((p) => +(p + 5).toFixed(2))}
+                  />
+                </View>
+                <Pressable
+                  testID="status-modal-price-save"
+                  onPress={() => submitStatusChoice("price_changed", priceDraft)}
+                  style={[styles.modalBtn, { borderColor: colors.brand, backgroundColor: colors.brand }]}
+                >
+                  <Text style={[styles.modalBtnTxt, { color: "#fff" }]}>SAVE NEW PRICE</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setPriceStep("initial")}
+                  style={[styles.modalBtn, { borderColor: colors.border }]}
+                >
+                  <Text style={[styles.modalBtnTxt, { color: colors.onSurfaceTertiary }]}>BACK</Text>
+                </Pressable>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
+  );
+}
+
+function PriceHoldButton({
+  testID,
+  icon,
+  onPress,
+  onHoldStep,
+}: {
+  testID: string;
+  icon: "add" | "remove";
+  onPress: () => void;
+  onHoldStep: () => void;
+}) {
+  const [holding, setHolding] = useState(false);
+  React.useEffect(() => {
+    if (!holding) return;
+    const t = setInterval(onHoldStep, 120);
+    return () => clearInterval(t);
+  }, [holding, onHoldStep]);
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      onPressIn={() => setHolding(true)}
+      onPressOut={() => setHolding(false)}
+      style={styles.priceBtn}
+    >
+      <Ionicons name={icon} size={28} color={colors.brand} />
+    </Pressable>
   );
 }
 
@@ -467,4 +740,104 @@ const styles = StyleSheet.create({
   statusTxt: { color: colors.onSurfaceTertiary, fontWeight: "700", letterSpacing: 1, fontSize: 11 },
   statusTxtActive: { color: colors.brand },
   muted: { color: colors.onSurfaceTertiary },
+  metaRow: {
+    flexDirection: "row",
+    gap: spacing.lg,
+    flexWrap: "wrap",
+    marginBottom: spacing.md,
+  },
+  metaItem: { flexDirection: "row", gap: 6, alignItems: "center" },
+  metaTxt: { color: colors.onSurfaceTertiary, fontSize: 12 },
+  actionsRow: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap", marginBottom: spacing.sm },
+  actionBtn: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
+  actionTxt: { color: colors.brand, fontWeight: "800", fontSize: 11, letterSpacing: 1 },
+  refreshStatusBtn: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    backgroundColor: colors.brand,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+  },
+  refreshStatusTxt: { color: "#fff", fontWeight: "800", letterSpacing: 1.5, fontSize: 12 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: colors.surfaceSecondary,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.border,
+    gap: spacing.sm,
+  },
+  modalTitle: {
+    color: colors.onSurface,
+    fontSize: 22,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  modalSub: {
+    color: colors.onSurfaceTertiary,
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: spacing.md,
+  },
+  modalBtn: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  modalBtnTxt: { fontWeight: "800", letterSpacing: 1.5, fontSize: 13 },
+  priceAdjustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginVertical: spacing.lg,
+    gap: spacing.md,
+  },
+  priceBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.brandTertiary,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  priceDisplay: {
+    flex: 1,
+    alignItems: "center",
+  },
+  priceDisplayLbl: {
+    color: colors.onSurfaceTertiary,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  priceDisplayVal: { color: colors.onSurface, fontSize: 32, fontWeight: "800" },
+  priceDelta: { color: colors.brand, fontSize: 12, fontWeight: "600", marginTop: 2 },
 });

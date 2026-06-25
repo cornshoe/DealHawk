@@ -14,6 +14,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { apiFetch } from "@/src/api/client";
 import { colors, spacing, radius, statusOptions, scoreColor, recommendationColor } from "@/src/theme";
 
+function relTime(iso?: string | null): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return "";
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 60) return "now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d`;
+  return `${Math.floor(d / 30)}mo`;
+}
+
 type Deal = {
   deal_id: string;
   title: string;
@@ -140,6 +155,12 @@ export default function Board() {
                   >
                     {(d.analysis?.recommendation || "—").toUpperCase()}
                   </Text>
+                  {d.created_at ? (
+                    <>
+                      <Text style={styles.dot}>•</Text>
+                      <Text style={styles.dealMetaTxt}>{relTime(d.created_at)}</Text>
+                    </>
+                  ) : null}
                 </View>
               </View>
               <View style={{ alignItems: "flex-end" }}>

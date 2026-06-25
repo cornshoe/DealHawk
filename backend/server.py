@@ -118,9 +118,11 @@ class Deal(BaseModel):
     condition: str = ""
     seller_description: str = ""
     notes: str = ""
+    listing_url: str = ""
     images: List[str] = Field(default_factory=list)
     status: Literal["new", "watching", "messaged", "purchased", "sold", "skipped"] = "new"
     analysis: Optional[DealAnalysisResult] = None
+    last_checked_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -132,6 +134,7 @@ class SaveDealBody(BaseModel):
     condition: Optional[str] = ""
     seller_description: Optional[str] = ""
     notes: Optional[str] = ""
+    listing_url: Optional[str] = ""
     images: List[str] = Field(default_factory=list)
     analysis: Optional[DealAnalysisResult] = None
     status: Optional[Literal["new", "watching", "messaged", "purchased", "sold", "skipped"]] = "new"
@@ -139,6 +142,9 @@ class SaveDealBody(BaseModel):
 class UpdateDealBody(BaseModel):
     status: Optional[Literal["new", "watching", "messaged", "purchased", "sold", "skipped"]] = None
     notes: Optional[str] = None
+    price: Optional[float] = None
+    listing_url: Optional[str] = None
+    mark_checked: Optional[bool] = None
 
 # ---------- Helpers ----------
 def now_utc() -> datetime:
@@ -533,9 +539,11 @@ async def save_deal(body: SaveDealBody, user: dict = Depends(get_current_user)):
         "condition": body.condition or "",
         "seller_description": body.seller_description or "",
         "notes": body.notes or "",
+        "listing_url": (body.listing_url or "").strip(),
         "images": body.images,
         "status": body.status or "new",
         "analysis": body.analysis.model_dump() if body.analysis else None,
+        "last_checked_at": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -573,11 +581,17 @@ async def get_deal(deal_id: str, user: dict = Depends(get_current_user)):
 
 @api.patch("/deals/{deal_id}", response_model=Deal)
 async def update_deal(deal_id: str, body: UpdateDealBody, user: dict = Depends(get_current_user)):
-    updates = {"updated_at": now_utc()}
+    updates: dict = {"updated_at": now_utc()}
     if body.status is not None:
         updates["status"] = body.status
     if body.notes is not None:
         updates["notes"] = body.notes
+    if body.price is not None:
+        updates["price"] = float(body.price)
+    if body.listing_url is not None:
+        updates["listing_url"] = body.listing_url.strip()
+    if body.mark_checked:
+        updates["last_checked_at"] = now_utc()
     res = await db.deals.find_one_and_update(
         {"deal_id": deal_id, "user_id": user["user_id"]},
         {"$set": updates},
@@ -586,6 +600,31 @@ async def update_deal(deal_id: str, body: UpdateDealBody, user: dict = Depends(g
     )
     if not res:
         raise HTTPException(status_code=404, detail="Deal not found")
+    return Deal(**res)
+
+@api.post("/deals/{deal_id}/refresh-analysis", response_model=Deal)
+async def refresh_analysis(deal_id: str, user: dict = Depends(get_current_user)):
+    """Re-run AI analysis using the deal's stored fields (incl. current price)."""
+    d = await db.deals.find_one({"deal_id": deal_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    body = AnalyzeBody(
+        title=d.get("title", ""),
+        price=float(d.get("price", 0)),
+        location=d.get("location", ""),
+        category=d.get("category", "other"),
+        condition=d.get("condition", ""),
+        seller_description=d.get("seller_description", ""),
+        notes=d.get("notes", ""),
+        images=d.get("images", []),
+    )
+    new_analysis = await analyze_deal(body, user)
+    res = await db.deals.find_one_and_update(
+        {"deal_id": deal_id, "user_id": user["user_id"]},
+        {"$set": {"analysis": new_analysis.model_dump(), "updated_at": now_utc()}},
+        return_document=True,
+        projection={"_id": 0},
+    )
     return Deal(**res)
 
 @api.delete("/deals/{deal_id}")

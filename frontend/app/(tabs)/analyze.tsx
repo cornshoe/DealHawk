@@ -12,7 +12,7 @@ import {
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -24,6 +24,7 @@ const CATS = categoryOptions.filter((c) => c.key !== "all");
 export default function Analyze() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ url?: string }>();
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [location, setLocation] = useState("");
@@ -31,9 +32,17 @@ export default function Analyze() {
   const [condition, setCondition] = useState("");
   const [sellerDesc, setSellerDesc] = useState("");
   const [notes, setNotes] = useState("");
+  const [listingUrl, setListingUrl] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Prefill URL when shared from external app via dealhawk://analyze?url=...
+  useEffect(() => {
+    if (params?.url && typeof params.url === "string") {
+      setListingUrl(params.url);
+    }
+  }, [params?.url]);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -98,6 +107,7 @@ export default function Analyze() {
           condition: condition.trim(),
           seller_description: sellerDesc.trim(),
           notes: notes.trim(),
+          listing_url: listingUrl.trim(),
           images,
           analysis,
           status: "new",
@@ -111,6 +121,7 @@ export default function Analyze() {
       setCondition("");
       setSellerDesc("");
       setNotes("");
+      setListingUrl("");
       setImages([]);
       router.push(`/deal/${deal.deal_id}` as any);
     } catch (e: any) {
@@ -155,6 +166,20 @@ export default function Analyze() {
             </Pressable>
           )}
         </View>
+
+        <Text style={styles.label}>LISTING URL</Text>
+        <Text style={styles.helper}>Paste the Facebook Marketplace link so you can re-check it later.</Text>
+        <TextInput
+          testID="analyze-url"
+          value={listingUrl}
+          onChangeText={setListingUrl}
+          placeholder="https://facebook.com/marketplace/item/..."
+          placeholderTextColor={colors.onSurfaceTertiary}
+          style={styles.input}
+          autoCapitalize="none"
+          keyboardType="url"
+          autoCorrect={false}
+        />
 
         <Text style={styles.label}>TITLE</Text>
         <TextInput
