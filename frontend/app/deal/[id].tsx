@@ -83,6 +83,77 @@ function relTime(iso?: string | null): string {
   return `${y}y ago`;
 }
 
+const VALID_STATUSES = ["new", "watching", "messaged", "purchased", "sold", "skipped"];
+
+function normalizeDeal(raw: any): Deal | null {
+  if (!raw || typeof raw !== "object") return null;
+  const a = raw.analysis && typeof raw.analysis === "object" ? raw.analysis : null;
+  const md = a?.market_data && typeof a.market_data === "object" ? a.market_data : null;
+  const status = typeof raw.status === "string" && VALID_STATUSES.includes(raw.status)
+    ? raw.status
+    : "new";
+  return {
+    deal_id: typeof raw.deal_id === "string" ? raw.deal_id : "",
+    title: typeof raw.title === "string" ? raw.title : "",
+    price: typeof raw.price === "number" && !isNaN(raw.price) ? raw.price : 0,
+    location: typeof raw.location === "string" ? raw.location : "",
+    category: typeof raw.category === "string" ? raw.category : "other",
+    condition: typeof raw.condition === "string" ? raw.condition : "",
+    seller_description:
+      typeof raw.seller_description === "string" ? raw.seller_description : "",
+    notes: typeof raw.notes === "string" ? raw.notes : "",
+    listing_url: typeof raw.listing_url === "string" ? raw.listing_url : "",
+    images: Array.isArray(raw.images) ? raw.images.filter((x: any) => typeof x === "string") : [],
+    status,
+    created_at: typeof raw.created_at === "string" ? raw.created_at : "",
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : "",
+    last_checked_at:
+      typeof raw.last_checked_at === "string" ? raw.last_checked_at : null,
+    price_history: Array.isArray(raw.price_history)
+      ? raw.price_history.filter(
+          (p: any) => p && typeof p === "object" && typeof p.price === "number"
+        )
+      : [],
+    inferred_fields: Array.isArray(raw.inferred_fields)
+      ? raw.inferred_fields.filter((x: any) => typeof x === "string")
+      : [],
+    analysis: a
+      ? {
+          deal_score: typeof a.deal_score === "number" ? a.deal_score : 0,
+          inferred_title:
+            typeof a.inferred_title === "string" ? a.inferred_title : null,
+          estimated_resale_value:
+            typeof a.estimated_resale_value === "number" ? a.estimated_resale_value : 0,
+          max_price_to_pay:
+            typeof a.max_price_to_pay === "number" ? a.max_price_to_pay : 0,
+          expected_profit:
+            typeof a.expected_profit === "number" ? a.expected_profit : 0,
+          risk_warning: typeof a.risk_warning === "string" ? a.risk_warning : "",
+          red_flags: Array.isArray(a.red_flags)
+            ? a.red_flags.filter((x: any) => typeof x === "string")
+            : [],
+          suggested_negotiation_message:
+            typeof a.suggested_negotiation_message === "string"
+              ? a.suggested_negotiation_message
+              : "",
+          recommendation:
+            typeof a.recommendation === "string" ? a.recommendation : "watch",
+          reasoning: typeof a.reasoning === "string" ? a.reasoning : "",
+          market_data: md
+            ? {
+                buyer_demand: typeof md.buyer_demand === "string" ? md.buyer_demand : "",
+                seller_competition:
+                  typeof md.seller_competition === "string" ? md.seller_competition : "",
+                local_price_range:
+                  typeof md.local_price_range === "string" ? md.local_price_range : "",
+                notes: typeof md.notes === "string" ? md.notes : "",
+              }
+            : null,
+        }
+      : null,
+  };
+}
+
 export default function DealDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -101,9 +172,10 @@ export default function DealDetail() {
   const load = useCallback(async () => {
     try {
       const d = await apiFetch<Deal>(`/deals/${id}`);
-      setDeal(d);
+      setDeal(normalizeDeal(d));
     } catch (e: any) {
       setErr(e?.message || "Failed to load");
+      setDeal(null);
     } finally {
       setLoading(false);
     }
@@ -122,7 +194,7 @@ export default function DealDetail() {
         method: "PATCH",
         body: JSON.stringify({ status: s }),
       });
-      setDeal(updated);
+      setDeal(normalizeDeal(updated));
     } catch (e: any) {
       setErr(e?.message || "Update failed");
     }
@@ -161,7 +233,7 @@ export default function DealDetail() {
       const updated = await apiFetch<Deal>(`/deals/${deal.deal_id}/refresh-analysis`, {
         method: "POST",
       });
-      setDeal(updated);
+      setDeal(normalizeDeal(updated));
     } catch (e: any) {
       setErr(e?.message || "Refresh failed");
     } finally {
@@ -293,7 +365,7 @@ export default function DealDetail() {
             ) : null}
           </View>
 
-          {deal.inferred_fields && deal.inferred_fields.length > 0 ? (
+          {Array.isArray(deal.inferred_fields) && deal.inferred_fields.length > 0 ? (
             <View style={styles.chipRow} testID="deal-inferred-chips">
               {deal.inferred_fields.map((f) => (
                 <View key={f} style={styles.aiChip} testID={`inferred-chip-${f}`}>
@@ -365,7 +437,7 @@ export default function DealDetail() {
                 </View>
               ) : null}
 
-              {a.red_flags?.length ? (
+              {Array.isArray(a.red_flags) && a.red_flags.length > 0 ? (
                 <>
                   <Text style={styles.sectionTitle}>RED FLAGS</Text>
                   {a.red_flags.map((f, i) => (
@@ -455,14 +527,14 @@ export default function DealDetail() {
             </>
           )}
 
-          {deal.price_history && deal.price_history.length >= 1 ? (
+          {Array.isArray(deal.price_history) && deal.price_history.length >= 1 ? (
             <>
               <Text style={styles.sectionTitle}>PRICE HISTORY</Text>
               <PriceHistoryChart history={deal.price_history} />
             </>
           ) : null}
 
-          {deal.images.length > 0 && (
+          {Array.isArray(deal.images) && deal.images.length > 0 && (
             <>
               <Text style={styles.sectionTitle}>PHOTOS</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -475,7 +547,7 @@ export default function DealDetail() {
 
           <Text style={styles.sectionTitle}>STATUS</Text>
           <View style={styles.statusGrid}>
-            {statusOptions.map((s) => {
+            {(Array.isArray(statusOptions) ? statusOptions : []).map((s) => {
               const active = s.key === deal.status;
               return (
                 <Pressable

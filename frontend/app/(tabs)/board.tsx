@@ -52,8 +52,8 @@ export default function Board() {
 
   const load = useCallback(async () => {
     try {
-      const d = await apiFetch<Deal[]>(`/deals?status=${status}&sort=profit`);
-      setDeals(d);
+      const d = await apiFetch<Deal[] | unknown>(`/deals?status=${status}&sort=profit`);
+      setDeals(Array.isArray(d) ? (d as Deal[]) : []);
     } catch {
       setDeals([]);
     } finally {
@@ -114,7 +114,7 @@ export default function Board() {
           <View style={styles.center}>
             <ActivityIndicator color={colors.brand} />
           </View>
-        ) : deals.length === 0 ? (
+        ) : !Array.isArray(deals) || deals.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="albums-outline" size={48} color={colors.onSurfaceTertiary} />
             <Text style={styles.emptyTitle}>Board is empty</Text>
@@ -128,7 +128,7 @@ export default function Board() {
             </Pressable>
           </View>
         ) : (
-          deals.map((d) => (
+          (Array.isArray(deals) ? deals : []).map((d) => (
             <Pressable
               key={d.deal_id}
               testID={`board-deal-${d.deal_id}`}

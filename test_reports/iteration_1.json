@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only regression test for two reported React Native runtime crashes on DealHawk AI. Both crashes are FIXED. Board screen no longer throws 'deals.map is not a function' across all 6 status chips. Deal detail no longer throws 'Cannot read property length of undefined' — existing deals render fully (score ring, price-history chart with 4 points, market data, red flags, status grid). A non-existent deal id (/deal/does_not_exist) renders the 'Deal not found' empty state instead of crashing. Navigation Auth -> Dashboard -> Board -> Deal Detail -> back works cleanly. End-to-end Analyze flow (paste title TEST_PS5 + price 300 -> ANALYZE) created deal_ecea6691fbdd, navigated to the new detail page with score 3 / SKIP recommendation, no crashes, then cleaned up via DELETE. Logged in with seeded smoke@test.com / pass1234 — NOTE: the other credential in /app/memory/test_credentials.md (tester@dealhawk.test) is rejected by the backend's email validator because `.test` is a special-use TLD; only smoke@test.com is usable for now.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Pressable / pointerEvents prop", "issue": "Console warning 'props.pointerEvents is deprecated. Use style.pointerEvents' fires on every screen render. Likely an internal RN/expo lib usage, but should be audited in app code if any explicit pointerEvents prop is set. Non-fatal."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix test_credentials.md: replace tester@dealhawk.test with the working seeded account smoke@test.com / pass1234 (the .test TLD is rejected by Pydantic EmailStr / email-validator), or relax the backend email validator. Currently the documented primary credential cannot log in.",
+    "(Optional) Audit any explicit `pointerEvents` props in components and migrate to `style.pointerEvents` to silence the deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "deal/[id].tsx normalizeDeal() looks solid — every field is type-checked and array fields are filtered. The remaining direct field reads (deal.title, deal.price, deal.location, etc.) are now safe because normalizeDeal always returns either a fully-populated Deal or null, and the null branch renders 'Deal not found'.",
+    "board.tsx defensively guards setDeals with Array.isArray(d) ? d : [] AND wraps the .map call in another Array.isArray check. Sufficient for the reported crash.",
+    "deal/[id].tsx line 281: `setDeal(updated)` in submitStatusChoice() does NOT pass `updated` through normalizeDeal(), unlike the other PATCH/POST handlers (load, updateStatus, refreshMarketData). This is inconsistent and could re-introduce a crash if the backend ever returns a malformed PATCH response. Recommend wrapping with normalizeDeal() like the other call sites."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only run)", "frontend": "100% (5/5 scenarios)" },
+  "seed_data_creation": "Created and then DELETEd one TEST_ deal (deal_ecea6691fbdd) as part of the Analyze E2E. No leftover data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use email smoke@test.com / pass1234 for login — tester@dealhawk.test is rejected by backend email validator (`.test` reserved TLD). Existing seeded deals for smoke user: deal_eeb1f48e5e1c (Vintage radio, status=new) and deal_056405ae08a2 (PS5 Disc Edition, status=new). Frontend external URL: https://deal-evaluator-5.preview.emergentagent.com. Analyze endpoint takes ~10–30s to return (LLM call) — use 60–90s timeout when waiting for navigation to /deal/{id}.",
+  "rca_of_issue": "Original crash 1 (board): /api/deals could return a non-array on auth/error edges; board called .map directly. FIX verified in board.tsx lines 55–56 (Array.isArray guard on setDeals) and line 131 (second Array.isArray check before .map). Original crash 2 (deal detail): screen accessed deal.images.length, deal.red_flags.length, deal.price_history.length, etc. without guards; if backend omitted any of these (or returned 404), the property access on undefined threw. FIX verified via normalizeDeal() (lines 88–155) which coerces every nested array/object field to a safe default and returns null for unusable input, plus Array.isArray(...) && ...length guards at every list site. Both crashes are no longer reproducible in the live preview."
+}
